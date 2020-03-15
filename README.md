@@ -1,2 +1,2 @@
 # MapReduce
-MapReduce
+This is a MapReduce Demo.
