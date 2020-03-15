@@ -14,10 +14,9 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.db.DBConfiguration;
-import org.apache.hadoop.mapreduce.lib.db.DBOutputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
@@ -53,7 +52,7 @@ public class Main extends Configured implements Tool {
     }
 
 
-    public static class CustomReducer extends Reducer<MapKeyOutputWritable, MapValueOutputWritable, DBOutputWritable,
+    public static class CustomReducer extends Reducer<MapKeyOutputWritable, MapValueOutputWritable, Text,
             NullWritable> {
         @Override
         public void reduce(MapKeyOutputWritable key, Iterable<MapValueOutputWritable> values, Context context) {
@@ -64,9 +63,10 @@ public class Main extends Configured implements Tool {
                 sumVal1.append(value.getVal1());
                 sumVal2.append(value.getVal2());
             }
+            String outputString = conf.get("datetime") + "\\\t" + key.getKey1() + "\\\t" + key.getKey2() + "\\\t" +
+                    sumVal1.toString() + "\\\t" + sumVal2.toString();
             try {
-                context.write(new DBOutputWritable(conf.get("datetime"), key.getKey1(), key.getKey2(),
-                        sumVal1.toString(), sumVal2.toString()), NullWritable.get());
+                context.write(new Text(outputString), NullWritable.get());
             } catch (IOException e) {
                 logger.error("CustomReducer write key " + key.toString() + " failed IOException error " +
                         e.getMessage());
@@ -100,13 +100,8 @@ public class Main extends Configured implements Tool {
         // 配置reduce个数
         conf.set("mapreduce.reduce.tasks", "250");
 
-        DBConfiguration.configureDB(conf,
-                "com.mysql.cj.jdbc.Driver",
-                "jdbc:mysql://127.0.0.1:3306/db_name?useUnicode=true&characterEncoding=UTF-8&useSSL=false&&serverTimezone=UTC",
-                "db_user",
-                "db_password");
-
         Job job = Job.getInstance(conf, "job_name");
+        job.setNumReduceTasks(10);      // 配置reduce个数
         job.setJarByClass(Main.class);
 
         FileInputFormat.addInputPath(job, inputFilePath);
@@ -124,13 +119,18 @@ public class Main extends Configured implements Tool {
         job.setMapOutputKeyClass(MapKeyOutputWritable.class);
         job.setMapOutputValueClass(MapValueOutputWritable.class);
 
-        job.setOutputKeyClass(DBOutputWritable.class);
+        job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(NullWritable.class);
-        job.setOutputFormatClass(DBOutputFormat.class);
+        job.setOutputFormatClass(TextOutputFormat.class);
 
-        String[] fields = new String[]{"datetime", "key1", "key2", "val1", "val2"};
-        DBOutputFormat.setOutput(job, "tab_name", fields);
-        return job.waitForCompletion(true) ? 0 : 1;
+        int res = 1;
+        try {
+            res = job.waitForCompletion(true) ? 0 : 1;
+        } catch (Exception e) {
+            logger.error("waitForCompletion at " + Main.datetime + " get Exception error: " + e.getMessage());
+        }
+
+        return res;
     }
 
     public static void main(String[] args) throws Exception {
