@@ -107,6 +107,7 @@ public class Main extends Configured implements Tool {
                 "db_password");
 
         Job job = Job.getInstance(conf, "job_name");
+        job.setNumReduceTasks(10);      // 配置reduce个数
         job.setJarByClass(Main.class);
 
         FileInputFormat.addInputPath(job, inputFilePath);
